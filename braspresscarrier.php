@@ -132,7 +132,7 @@ class BraspressCarrier extends CarrierModule
 	public function getContent()
 	{
 		$this->_html .= '<h2>' . $this->l('Braspress Carrier').'</h2>';
-		if (!empty($_POST) AND Tools::isSubmit('submitSave'))
+		if (!empty($_POST) AND Tools::isSubmit('regiao'))
 		{
 			$this->_postValidation();
 			if (!sizeof($this->_postErrors))
@@ -147,68 +147,28 @@ class BraspressCarrier extends CarrierModule
 
 	private function _displayForm()
 	{
-		$db = Db::getInstance();
-
-		$regioesSql = 'SELECT * FROM '._DB_PREFIX_.'braspress_regiao';
-		$regioes = array();
-		$results = $db->ExecuteS($regioesSql);
-		foreach ($results as $regiao) {
-			$regioes[$regiao['id']] = $regiao;
-		}
-		$pesosSql = 'SELECT * FROM '._DB_PREFIX_.'braspress_faixa_peso';
-		$faixasPeso = array();
-		$results = $db->ExecuteS($pesosSql);
-		foreach ($results as $faixa) {
-			$faixasPeso[] = $faixa;
-		}
-		$taxasSql = 'SELECT * FROM '._DB_PREFIX_.'braspress_taxas_frete WHERE braspress_regiao_id = %d AND braspress_faixa_peso_id = %d';
-		//$taxas = array();
-
-		// monta html da tabela para entrada das taxas
-		$tableRows = array();
-		$tableRows[] = '<tr>
-			<th width="30%">Região</th>
-			<th width="10%">até 10 Kg</th>
-			<th width="10%">até 20 Kg</th>
-			<th width="10%">até 35 Kg</th>
-			<th width="10%">até 50 Kg</th>
-			<th width="10%">até 70 Kg</th>
-			<th width="10%">acima de 70 Kg</th>
-			<th width="10%">Taxas</th>
-		</tr>';
-
-		foreach ($regioes as $id_regiao => $regiao) {
-			$tr = '<tr>';
-			$columns = array();
-			$columns[] = sprintf('<td valign="top" class="braspress_regiao_name"><strong>%s</strong></td>', $regiao['nome']);
-
-			for ($j = 0; $j < count($faixasPeso); $j++) {
-				$faixa = $faixasPeso[$j];
-				$id_faixa_peso = $faixa['id'];
-
-				$prepared = sprintf($taxasSql, $id_regiao, $id_faixa_peso);
-				if ($taxa = $db->getRow($prepared, false)) {
-					$labelFp = ($j + 1 < count($faixasPeso)) ? 'FP' : 'FPK';
-					$fp = sprintf('<label for="regiao_%d_fp">%s</label> <input type="text" class="braspress_taxa_input" name="regiao[%d][fp]" id="regiao_%d_fp" value="%.2f" />', (int)$id_regiao, $labelFp, (int)$id_regiao, (int)$id_regiao, (float)number_format($taxa['fp'], 2, '.', ''));
-					$fv = sprintf('<label for="regiao_%d_fp">FV</label> <input type="text" class="braspress_taxa_input" name="regiao[%d][fv]" value="%.2f" />', (int)$id_regiao, (int)$id_regiao, (int)$id_regiao, (float)number_format($taxa['fv'], 2, '.', ''));
-					$columns[] = sprintf('<td>%s<br />%s</td>', $fp, $fv);
-				}
-			}
-			// coluna para taxas:
-			// pedagio, adm_rodo, tas_rodo, gris_rodo, trf, trf_min e suframa
-			$columns[] = '<td></td>';
-
-			$tr .= implode(' ', $columns);
-			$tr .= '</tr>';
-			$tableRows[] = $tr;
-		}
-
-		$table = '<table class="braspress_table_taxas" width="100%" cellpadding="4" cellspacing="0" border="0">';
-		$table .= implode(' ', $tableRows);
-		$table .= '</table>';
+		$table = $this->inputTableBraspress();
 
 		$this->_html .= '
 			<style type="text/css">
+				.braspress_table_taxas th {
+					border-bottom: 2px solid #000;
+					border-right: 1px solid lightyellow;
+					background-color: yellow;
+				}
+				.braspress_table_taxas td {
+					border-bottom: 1px solid #000;
+					border-right: 1px solid #ddd;
+				}
+				.braspress_table_taxas tr {
+					border-bottom: 1px solid #000;
+				}
+				.even {
+					background-color: #fff;
+				}
+				.odd {
+					background-color: lightyellow;
+				}
 				.braspress_table_taxas label {
 					float: none;
 					font-weight: normal;
@@ -222,20 +182,41 @@ class BraspressCarrier extends CarrierModule
 				.braspress_taxa_input {
 					width: 40px;
 				}
+				input.usar_fpk {
+					margin-left: 7px;
+				}
 			</style>
 			<form action="index.php?tab='.Tools::getValue('tab').'&configure='.Tools::getValue('configure').'&token='.Tools::getValue('token').'&tab_module='.Tools::getValue('tab_module').'&module_name='.Tools::getValue('module_name').'&id_tab=1&section=general" method="post" class="form" id="configForm">
 				<fieldset>
 					<legend><img src="'.$this->_path.'logo.gif" alt="" /> '.$this->l('Taxas Braspress Nível Nacional').'</legend>
 					'.$table.'
-					<div class="margin-form"><input class="button" name="submitSave" type="submit"></div>
 				</fieldset>
+				<p><center><input type="submit" name="submitSave" value="'.$this->l('Salvar').'" class="button" /></center></p>
 			</form>';
 	}
 
 	private function _postValidation()
 	{
-		// Check configuration values
-		$this->_postErrors[]  = $this->l('Configure todas as taxas conforme sua tabela Braspress');
+		$regioes = Tools::getValue('regiao');
+		// normaliza dados configurando para 0.00 valores nao passados
+		// e formatando numero para usar . como separador decimal
+		foreach ($regioes as $regiao) {
+			foreach ($regiao['faixa'] as $faixa) {
+				foreach ($faixa as $id => $valor) {
+					// valida se existe FP(K) e FV
+					if ($valor == "")
+						$faixa[$id] = 0.00;
+					else
+						$faixa[$id] = (float)number_format($valor, 2, '.', '');
+				}
+			}
+			foreach ($regiao as $id => $valor) {
+				if ($valor == "")
+					$regiao[$id] = 0.00;
+				else
+					$regiao[$id] = (float)number_format($valor, 2, '.', '');
+			}
+		}
 	}
 
 	private function _postProcess()
@@ -472,5 +453,108 @@ class BraspressCarrier extends CarrierModule
 				return false;
 
 		return false;
+	}
+
+	/**
+	 * Monta tabela de inputs para taxas BRASPRESS
+	 * @return string HTML Table with inputs
+	 */
+	protected function inputTableBraspress()
+	{
+		$db = Db::getInstance();
+
+		// regioes
+		$regioesSql = 'SELECT * FROM '._DB_PREFIX_.'braspress_regiao';
+		$regioes = array();
+		$results = $db->ExecuteS($regioesSql);
+		foreach ($results as $regiao) {
+			$regioes[] = $regiao;
+		}
+		// faixas de peso
+		$pesosSql = 'SELECT * FROM '._DB_PREFIX_.'braspress_faixa_peso';
+		$faixasPeso = array();
+		$results = $db->ExecuteS($pesosSql);
+		foreach ($results as $faixa) {
+			$faixasPeso[] = $faixa;
+		}
+
+		// taxas configuradas conforme regiao e faixa de peso
+		$taxasSql = 'SELECT * FROM '._DB_PREFIX_.'braspress_taxas_frete WHERE braspress_regiao_id = %d AND braspress_faixa_peso_id = %d';
+
+		// monta html da tabela para entrada das taxas
+		$tableRows = array();
+		$tableRows[] = '<tr>
+			<th width="30%">Região</th>
+			<th width="10%">até 10 Kg</th>
+			<th width="10%">até 20 Kg</th>
+			<th width="10%">até 35 Kg</th>
+			<th width="10%">até 50 Kg</th>
+			<th width="10%">até 70 Kg</th>
+			<th width="10%">acima de 70 Kg</th>
+			<th width="10%">Taxas</th>
+		</tr>';
+
+		for ($i = 0; $i < count($regioes); $i++) {
+			$regiao = $regioes[$i];
+			$id_regiao = $regiao['id'];
+
+			$tr = ($i % 2 == 0) ? '<tr class="even">' : '<tr class="odd">';
+			$columns = array();
+			$columns[] = sprintf('<td valign="top" class="braspress_regiao_name">%d. <strong>%s</strong></td>', $i + 1, $regiao['nome']);
+
+			// coluna para taxas:
+			// pedagio, adm_rodo, tas_rodo, gris_rodo, trf, trf_min e suframa
+			$taxas = array();
+			for ($j = 0; $j < count($faixasPeso); $j++) {
+				$faixa = $faixasPeso[$j];
+				$id_faixa_peso = $faixa['id'];
+
+				$prepared = sprintf($taxasSql, $id_regiao, $id_faixa_peso);
+				if ($taxa = $db->getRow($prepared, false)) {
+					$usarFpk = (boolean)$faixa['usar_fpk'];
+					$labelFp = (!$usarFpk) ? 'FP' : 'FPK';
+
+					// FP ou FPK
+					$fp = $usarFpk
+						? sprintf('<label for="regiao_%d_faixa_%d_fpk">%s</label> <input type="text" class="braspress_taxa_input" name="regiao[%d][faixa][%d][fpk]" id="regiao_%d_faixa_%d_fpk" value="%.2f" />', (int)$id_regiao, (int)$id_faixa_peso, $labelFp, (int)$id_regiao, (int)$id_faixa_peso, (int)$id_regiao, (int)$id_faixa_peso, (float)number_format($taxa['fpk'], 2, '.', ''))
+							. sprintf('<input type="hidden" class="braspress_taxa_input" name="regiao[%d][faixa][%d][fp]" id="regiao_%d_faixa_%d_fp" value="%.2f" />', (int)$id_regiao, (int)$id_faixa_peso, (int)$id_regiao, (int)$id_faixa_peso, (float)number_format($taxa['fp'], 2, '.', ''))
+						: sprintf('<label for="regiao_%d_faixa_%d_fp">%s</label> <input type="text" class="braspress_taxa_input" name="regiao[%d][faixa][%d][fp]" id="regiao_%d_%d_fp" value="%.2f" />', (int)$id_regiao, (int)$id_faixa_peso, $labelFp, (int)$id_regiao, (int)$id_faixa_peso, (int)$id_regiao, (int)$id_faixa_peso, (float)number_format($taxa['fp'], 2, '.', ''))
+							. sprintf('<input type="hidden" class="braspress_taxa_input" name="regiao[%d][faixa][%d][fpk]" id="regiao_%d_faixa_%d_fpk" value="%.2f" />', (int)$id_regiao, (int)$id_faixa_peso, (int)$id_regiao, (int)$id_faixa_peso, (float)number_format($taxa['fpk'], 2, '.', ''));
+					// FV
+					$fv = sprintf('<label for="regiao_%d_faixa_%d_fp">FV</label> <input type="text" class="braspress_taxa_input %s" name="regiao[%d][faixa][%d][fv]" id="regiao_%d_faixa_%d_fv" value="%.2f" />', (int)$id_regiao, (int)$id_faixa_peso, $usarFpk ? 'usar_fpk' : '', (int)$id_regiao, (int)$id_faixa_peso, (int)$id_regiao, (int)$id_faixa_peso, (float)number_format($taxa['fv'], 2, '.', ''));
+
+					// coluna de taxas: pedagio, adm_rodo, tas_rodo, gris_rodo, etc...
+					$taxas[$id_regiao] = array(
+							'pedagio' => sprintf('<label for="regiao_%d_pedagio">Pedágio</label><br/><input type="text" class="braspress_taxa_input" name="regiao[%d][pedagio]" id="regiao_%d_pedagio" value="%.2f" />', (int)$id_regiao, (int)$id_regiao, (int)$id_regiao, (float)number_format($taxa['pedagio'], 2, '.', '')),
+							'adm_rodo' => sprintf('<label for="regiao_%d_adm_rodo">ADM Rodo</label><br/><input type="text" class="braspress_taxa_input" name="regiao[%d][adm_rodo]" id="regiao_%d_adm_rodo" value="%.2f" />', (int)$id_regiao, (int)$id_regiao, (int)$id_regiao, (float)number_format($taxa['adm_rodo'], 2, '.', '')),
+							'gris_rodo' => sprintf('<label for="regiao_%d_gris_rodo">GRIS Rodo</label><br/><input type="text" class="braspress_taxa_input" name="regiao[%d][gris_rodo]" id="regiao_%d_gris_rodo" value="%.2f" />', (int)$id_regiao, (int)$id_regiao, (int)$id_regiao, (float)number_format($taxa['gris_rodo'], 2, '.', '')),
+							'tas_rodo' => sprintf('<label for="regiao_%d_tas_rodo">TAS Rodo</label><br/><input type="text" class="braspress_taxa_input" name="regiao[%d][tas_rodo]" id="regiao_%d_tas_rodo" value="%.2f" />', (int)$id_regiao, (int)$id_regiao, (int)$id_regiao, (float)number_format($taxa['tas_rodo'], 2, '.', '')),
+							'trf' => sprintf('<label for="regiao_%d_trf">TRF</label><br/><input type="text" class="braspress_taxa_input" name="regiao[%d][trf]" id="regiao_%d_trf" value="%.2f" />', (int)$id_regiao, (int)$id_regiao, (int)$id_regiao, (float)number_format($taxa['trf'], 2, '.', '')),
+							'trf_min' => sprintf('<label for="regiao_%d_trf_min">TRF mín.</label><br/><input type="text" class="braspress_taxa_input" name="regiao[%d][trf_min]" id="regiao_%d_trf_min" value="%.2f" />', (int)$id_regiao, (int)$id_regiao, (int)$id_regiao, (float)number_format($taxa['trf_min'], 2, '.', '')),
+							'suframa' => sprintf('<label for="regiao_%d_suframa">SUFRAMA</label><br/><input type="text" class="braspress_taxa_input" name="regiao[%d][suframa]" id="regiao_%d_suframa" value="%.2f" />', (int)$id_regiao, (int)$id_regiao, (int)$id_regiao, (float)number_format($taxa['suframa'], 2, '.', '')),
+						);
+
+					$columns[] = sprintf('<td valign="top">%s<br />%s</td>', $fp, $fv);
+				}
+			} // for faixasPeso
+
+			// coluna para taxas:
+			// pedagio, adm_rodo, tas_rodo, gris_rodo, trf, trf_min e suframa
+			$inputTaxas = null;
+			foreach ($taxas[$id_regiao] as $taxaNome => $taxaInput) {
+				$inputTaxas .= sprintf('%s<br />', $taxaInput);
+			}
+			$columns[] = '<td valign="top">'.$inputTaxas.'</td>';
+
+			$tr .= implode(' ', $columns);
+			$tr .= '</tr>';
+			$tableRows[] = $tr;
+		}
+
+		$table = '<table class="braspress_table_taxas" width="100%" cellpadding="4" cellspacing="0" border="0">';
+		$table .= implode(' ', $tableRows);
+		$table .= '</table>';
+
+		return $table;
 	}
 }
