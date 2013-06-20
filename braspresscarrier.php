@@ -151,52 +151,81 @@ class BraspressCarrier extends CarrierModule
 
 		$regioesSql = 'SELECT * FROM '._DB_PREFIX_.'braspress_regiao';
 		$regioes = array();
-		while ($regiao = $db->getRow($regioesSql)) {
+		$results = $db->ExecuteS($regioesSql);
+		foreach ($results as $regiao) {
 			$regioes[$regiao['id']] = $regiao;
 		}
 		$pesosSql = 'SELECT * FROM '._DB_PREFIX_.'braspress_faixa_peso';
 		$faixasPeso = array();
-		while ($faixa = $db->getRow($pesosSql)) {
-			$faixasPeso[$faixa['id']] = $faixa;
+		$results = $db->ExecuteS($pesosSql);
+		foreach ($results as $faixa) {
+			$faixasPeso[] = $faixa;
 		}
 		$taxasSql = 'SELECT * FROM '._DB_PREFIX_.'braspress_taxas_frete WHERE braspress_regiao_id = %d AND braspress_faixa_peso_id = %d';
-		$taxas = array();
-		foreach ($regioes as $id_regiao => $regiao) {
-			foreach ($faixasPeso as $id_faixa_peso => $faixa) {
-				$prepared = sprintf($taxasSql, $id_regiao, $id_faixa_peso);
-				if ($taxa = $db->getRow($prepared)) {
-					$id = sprintf('%d_%d', $id_regiao, $id_faixa_peso);
-					$taxas[$id] = $taxa;
-				}
-			}
-		}
+		//$taxas = array();
+
 		// monta html da tabela para entrada das taxas
 		$tableRows = array();
+		$tableRows[] = '<tr>
+			<th width="30%">Região</th>
+			<th width="10%">até 10 Kg</th>
+			<th width="10%">até 20 Kg</th>
+			<th width="10%">até 35 Kg</th>
+			<th width="10%">até 50 Kg</th>
+			<th width="10%">até 70 Kg</th>
+			<th width="10%">acima de 70 Kg</th>
+			<th width="10%">Taxas</th>
+		</tr>';
+
 		foreach ($regioes as $id_regiao => $regiao) {
 			$tr = '<tr>';
 			$columns = array();
+			$columns[] = sprintf('<td valign="top" class="braspress_regiao_name"><strong>%s</strong></td>', $regiao['nome']);
 
-			foreach ($faixasPeso as $id_faixa_peso => $faixa) {
-				$taxa_id = sprintf('%d_%d', $id_regiao, $id_taxa);
-				$taxa = $taxas[$taxa_id];
-				$fp = sprintf('<input type="text" class="braspress_taxa_input" name="regiao[%d][fp]" value="%f" />', (int)$id_regiao, (float)$taxa['fp']);
-				$fv = sprintf('<input type="text" class="braspress_taxa_input" name="regioa[%d][fv]" value="%f" />', (int)$id_regiao, (float)$taxa['fv']);
-				$columns[] = sprintf('<td>%s<br />%s</td>', $fp, $fv);
+			for ($j = 0; $j < count($faixasPeso); $j++) {
+				$faixa = $faixasPeso[$j];
+				$id_faixa_peso = $faixa['id'];
+
+				$prepared = sprintf($taxasSql, $id_regiao, $id_faixa_peso);
+				if ($taxa = $db->getRow($prepared, false)) {
+					$labelFp = ($j + 1 < count($faixasPeso)) ? 'FP' : 'FPK';
+					$fp = sprintf('<label for="regiao_%d_fp">%s</label> <input type="text" class="braspress_taxa_input" name="regiao[%d][fp]" id="regiao_%d_fp" value="%.2f" />', (int)$id_regiao, $labelFp, (int)$id_regiao, (int)$id_regiao, (float)number_format($taxa['fp'], 2, '.', ''));
+					$fv = sprintf('<label for="regiao_%d_fp">FV</label> <input type="text" class="braspress_taxa_input" name="regiao[%d][fv]" value="%.2f" />', (int)$id_regiao, (int)$id_regiao, (int)$id_regiao, (float)number_format($taxa['fv'], 2, '.', ''));
+					$columns[] = sprintf('<td>%s<br />%s</td>', $fp, $fv);
+				}
 			}
+			// coluna para taxas:
+			// pedagio, adm_rodo, tas_rodo, gris_rodo, trf, trf_min e suframa
+			$columns[] = '<td></td>';
 
 			$tr .= implode(' ', $columns);
 			$tr .= '</tr>';
 			$tableRows[] = $tr;
 		}
-		$table = '<table width="100%" cellpadding="4" cellspacing="0" bordercolor="#000">';
+
+		$table = '<table class="braspress_table_taxas" width="100%" cellpadding="4" cellspacing="0" border="0">';
 		$table .= implode(' ', $tableRows);
 		$table .= '</table>';
 
 		$this->_html .= '
+			<style type="text/css">
+				.braspress_table_taxas label {
+					float: none;
+					font-weight: normal;
+					font-size: 10px;
+					display: inline;
+					text-align: left;
+				}
+				.braspress_regiao_name {
+					font-size: 10px;
+				}
+				.braspress_taxa_input {
+					width: 40px;
+				}
+			</style>
 			<form action="index.php?tab='.Tools::getValue('tab').'&configure='.Tools::getValue('configure').'&token='.Tools::getValue('token').'&tab_module='.Tools::getValue('tab_module').'&module_name='.Tools::getValue('module_name').'&id_tab=1&section=general" method="post" class="form" id="configForm">
 				<fieldset>
 					<legend><img src="'.$this->_path.'logo.gif" alt="" /> '.$this->l('Taxas Braspress Nível Nacional').'</legend>
-					<h4>'.$this->l('BRASPRESS Taxas Nível Nacional').' :</h4>
 					'.$table.'
 					<div class="margin-form"><input class="button" name="submitSave" type="submit"></div>
 				</fieldset>
