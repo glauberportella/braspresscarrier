@@ -211,10 +211,12 @@ class BraspressCarrier extends CarrierModule
 				}
 			}
 			foreach ($regiao as $id => $valor) {
-				if ($valor == "")
-					$regiao[$id] = 0.00;
-				else
-					$regiao[$id] = (float)number_format($valor, 2, '.', '');
+				if (!is_array($valor)) {
+					if ($valor == "")
+						$regiao[$id] = 0.00;
+					else
+						$regiao[$id] = (float)str_replace(',', '.', $valor);
+				}
 			}
 		}
 	}
