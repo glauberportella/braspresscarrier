@@ -352,7 +352,7 @@ class BraspressCarrier extends CarrierModule
 		// This example returns shipping cost with overcost set in the back-office, but you can call a webservice or calculate what you want before returning the final value to the Cart
 		if ($this->id_carrier == (int)(Configuration::get('BRASPRESS_CARRIER_ID')))
 		{
-			// todo
+			return $this->getOrderShippingCostExternal($params);
 		}
 
 		// If the carrier is not known, you can return false, the carrier won't appear in the order process
