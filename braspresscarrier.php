@@ -65,15 +65,15 @@ class BraspressCarrier extends CarrierModule
 				'shipping_handling' => false,
 				'range_behavior' => 0,
 				'delay' => array(
-					'en' => 'Descrição da entrega',
-					'br' => 'Descrição da entrega',
+					'en' => 'TRANSPORTADORA BRASPRESS',
+					'br' => 'TRANSPORTADORA BRASPRESS',
 					Language::getIsoById(Configuration::get
-						('PS_LANG_DEFAULT')) => 'Descrição de entrega'),
+						('PS_LANG_DEFAULT')) => 'TRANSPORTADORA BRASPRESS'),
 				'id_zone' => 6, // Area where the carrier operates
 				'is_module' => true, // We specify that it is a module
 				'shipping_external' => true,
 				'external_module_name' => 'braspresscarrier', // We specify the name of the module
-				'need_range' => false // We specify that we do not want the calculations for the ranges
+				'need_range' => true // We specify that we do not want the calculations for the ranges
 					// that are configured in the back office
 			);
 		$id_carrier = $this->installExternalCarrier($carrier);
@@ -222,17 +222,6 @@ class BraspressCarrier extends CarrierModule
 				}
 				$i++;
 			}
-
-//			// demais campos de taxas da regiao
-//			foreach ($regiao_data as $taxas_frete_field => $taxas_frete_field_value) {
-//				if (!is_array($taxas_frete_field_value)) {
-//					if ($taxas_frete_field_value == "")
-//						$taxas_frete_field_value = 0.00;
-//					else
-//						$taxas_frete_field_value = (float)str_replace(',', '.', $taxas_frete_field_value);
-//					$rows[$i][$taxas_frete_field] = $taxas_frete_field_value;
-//				}
-//			}
 		}
 		// obtem demais taxas do form para a regiao
 		for ($i = 0; $i < count($rows); $i++) {
@@ -352,7 +341,7 @@ class BraspressCarrier extends CarrierModule
 		// This example returns shipping cost with overcost set in the back-office, but you can call a webservice or calculate what you want before returning the final value to the Cart
 		if ($this->id_carrier == (int)(Configuration::get('BRASPRESS_CARRIER_ID')))
 		{
-			return $this->getOrderShippingCostExternal($params);
+			return $this->calculate($params);
 		}
 
 		// If the carrier is not known, you can return false, the carrier won't appear in the order process
@@ -363,106 +352,7 @@ class BraspressCarrier extends CarrierModule
 	{
 		if ($this->id_carrier == (int)(Configuration::get('BRASPRESS_CARRIER_ID')))
 		{
-			// calcula conforme tabela braspress configurada no modulo
-			/**
-			 * 1 - Obtemos CEP do customer
-			 * 2 - Encontramos a qual regiao o customer pertence
-			 * 3 - Obtemos as taxas na tabela para a regiao do customer
-			 * 4 - Calculamos taxas conforme tabela Braspress
-			 * 5 - retornamos valor calculado
-			 */
-			$db = Db::getInstance();
-
-			$cart = new Cart($params->id);
-			$customer = new Customer($params->id_customer);
-			$address = new Address($params->id_address_delivery);
-			$postcode = (int)substr($address->postcode, 0, 5);
-
-			$totalNota = $cart->getOrderTotal(true, Cart::BOTH);
-
-			$regiao = array();
-			$faixaPeso = array();
-
-			// regiao
-			$sqlRegiao = 'SELECT r.* FROM '._DB_PREFIX_.'braspress_regiao r'.
-				' WHERE r.cep_inicial >= '.$postcode.' AND r.cep_final <= '.$postcode;
-			$regiao = $db->getRow($sqlRegiao);
-			if (!$regiao)
-				return false;
-
-			// faixa de peso
-			$peso = $cart->getTotalWeight();
-			$sqlFaixaPeso = 'SELECT f.* FROM '._DB_PREFIX_.'braspress_faixa_peso'.
-				' WHERE f.peso_inicial >= '.$peso.' AND f.peso_final <= '.$peso;
-			$faixaPeso = $db->getRow($sqlFaixaPeso);
-			if (!$faixaPeso)
-				return false;
-
-			// tarifas
-			$sqlTaxas = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_taxas_frete'.
-				' WHERE t.braspress_regiao_id = '.$regiao['id'].' AND t.braspress_faixa_peso_id = '.$faixaPeso['id'];
-			$taxas = $db->getRow($sqlTaxas);
-			if (!$taxas)
-				return false;
-
-			// TRF
-			$sqlTrf = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_trf_regiao'.
-				' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
-			$trf = $db->getRow($sqlTrf);
-			// TAS RODO
-			$sqlTrf = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_tas_rodo_regiao'.
-				' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
-			$tasrodo = $db->getRow($sqlTrf);
-			// SUFRAMA
-			$sqlTrf = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_suframa_regiao'.
-				' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
-			$suframa = $db->getRow($sqlTrf);
-
-			$freteSubtotal = 0;
-			$freteTotal = 0;
-
-			$fv = ($totalNota * $taxas['fv'] / 100);
-			if ($faixaPeso['usar_fpk'] == 1) {
-				$freteSubtotal = $taxas['fpk'] * $peso + $fv;
-			} else {
-				$freteSubtotal = $taxas['fp'] + $fv;
-			}
-			$freteTotal += $freteSubtotal;
-
-			// pedagio
-			// Se for 100Kg 3,90. Acima de 100Kg será cobrado mais 3,90. e assim sucessivamente.
-			$extraPedagio = (int)($peso / 100);
-			$multiplicador = 1;
-			if ($extraPedagio > 0)
-				$multiplicador = $extraPedagio;
-			$pedagio = $taxas['pedagio'] * $multiplicador;
-			$freteTotal += $pedagio;
-
-			// gris rodo
-			$valGris = $taxas['gris_rodo'] * $totalNota / 100;
-
-			// trf
-			if ($trf) {
-				$valTrf = $taxas['trf'] * $totalNota / 100;
-				$freteTotal += $valTrf;
-			}
-
-			// tas rodo
-			if ($tasrodo) {
-				$freteTotal += $taxas['tas_rodo'];
-			}
-
-			// suframa
-			if ($suframa) {
-				$freteTotal += $taxas['suframa'];
-			}
-
-			// adm rodo
-			if ($taxas['adm_rodo']) {
-				$freteTotal += ($freteSubtotal * $taxas['adm_rodo'] / 100);
-			}
-
-			return (float)$freteTotal;
+			return $this->calculate($params);
 		}
 
 		return false;
@@ -601,5 +491,110 @@ class BraspressCarrier extends CarrierModule
 		$table .= '</table>';
 
 		return $table;
+	}
+
+	protected function calculate($params)
+	{
+		// calcula conforme tabela braspress configurada no modulo
+		/**
+		 * 1 - Obtemos CEP do customer
+		 * 2 - Encontramos a qual regiao o customer pertence
+		 * 3 - Obtemos as taxas na tabela para a regiao do customer
+		 * 4 - Calculamos taxas conforme tabela Braspress
+		 * 5 - retornamos valor calculado
+		 */
+		$db = Db::getInstance();
+
+		$cart = new Cart($params->id);
+		$customer = new Customer($params->id_customer);
+		$address = new Address($params->id_address_delivery);
+		$postcode = (int)substr($address->postcode, 0, 5);
+
+		$totalNota = $cart->getOrderTotal(true, Cart::BOTH_WITHOUT_SHIPPING);
+
+		$regiao = array();
+		$faixaPeso = array();
+
+		// regiao
+		$sqlRegiao = 'SELECT r.* FROM '._DB_PREFIX_.'braspress_regiao r'.
+			' WHERE '.$postcode.' BETWEEN r.cep_inicial AND r.cep_final';
+		$regiao = $db->getRow($sqlRegiao);
+		if (!$regiao)
+			return false;
+
+		// faixa de peso
+		$peso = $cart->getTotalWeight();
+		$sqlFaixaPeso = 'SELECT f.* FROM '._DB_PREFIX_.'braspress_faixa_peso f'.
+			' WHERE '.(float)$peso.' BETWEEN f.peso_inicial AND f.peso_final';
+		$faixaPeso = $db->getRow($sqlFaixaPeso);
+		if (!$faixaPeso)
+			return false;
+
+		// tarifas
+		$sqlTaxas = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_taxas_frete t'.
+			' WHERE t.braspress_regiao_id = '.$regiao['id'].' AND t.braspress_faixa_peso_id = '.$faixaPeso['id'];
+		$taxas = $db->getRow($sqlTaxas);
+		if (!$taxas)
+			return false;
+
+		/*// TRF
+		$sqlTrf = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_trf_regiao t'.
+			' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
+		$trf = $db->getRow($sqlTrf);
+		// TAS RODO
+		$sqlTrf = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_tas_rodo_regiao t'.
+			' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
+		$tasrodo = $db->getRow($sqlTrf);
+		// SUFRAMA
+		$sqlTrf = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_suframa_regiao t'.
+			' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
+		$suframa = $db->getRow($sqlTrf);*/
+
+		$freteSubtotal = 0;
+		$freteTotal = 0;
+
+		$fv = ($totalNota * $taxas['fv'] / 100);
+		if ($faixaPeso['usar_fpk'] == 1) {
+			$freteSubtotal = $taxas['fpk'] * $peso + $fv;
+		} else {
+			$freteSubtotal = $taxas['fp'] + $fv;
+		}
+		$freteTotal += $freteSubtotal;
+
+		// pedagio
+		// Se for 100Kg 3,90. Acima de 100Kg será cobrado mais 3,90. e assim sucessivamente.
+		$extraPedagio = (int)($peso / 100);
+		$multiplicador = 1;
+		if ($extraPedagio > 0)
+			$multiplicador = $extraPedagio;
+		$pedagio = $taxas['pedagio'] * $multiplicador;
+		$freteTotal += $pedagio;
+
+		// gris rodo
+		$valGris = $taxas['gris_rodo'] * $totalNota / 100;
+
+		// trf
+		//if ($trf) {
+			$valTrf = $taxas['trf'] * $totalNota / 100;
+			$valTrf = $valTrf < $taxas['trf_minimo'] ? $taxas['trf_minimo'] : $valTrf;
+			$freteTotal += $valTrf;
+		//}
+
+		// tas rodo
+		//if ($tasrodo) {
+			$freteTotal += $taxas['tas_rodo'];
+		//}
+
+		// suframa
+		//if ($suframa) {
+			$freteTotal += $taxas['suframa'];
+		//}
+
+		// adm rodo
+		//if ($taxas['adm_rodo']) {
+			$freteTotal += ($freteSubtotal * $taxas['adm_rodo'] / 100);
+		//}
+
+		return (float)$freteTotal;
 	}
 }

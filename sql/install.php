@@ -41,13 +41,13 @@ $sql[] = 'CREATE  TABLE IF NOT EXISTS `'._DB_PREFIX_.'braspress_taxas_frete` (
   CONSTRAINT `fk_braspress_regiao_faixa_peso_braspress_regiao`
     FOREIGN KEY (`braspress_regiao_id` )
     REFERENCES `'._DB_PREFIX_.'braspress_regiao` (`id` )
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION,
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
   CONSTRAINT `fk_braspress_regiao_faixa_peso_braspress_faixa_peso1`
     FOREIGN KEY (`braspress_faixa_peso_id` )
     REFERENCES `'._DB_PREFIX_.'braspress_faixa_peso` (`id` )
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE)
 ENGINE = '._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8;';
 
 $sql[] = 'CREATE  TABLE IF NOT EXISTS `'._DB_PREFIX_.'braspress_trf_regiao` (
@@ -65,8 +65,8 @@ $sql[] = 'CREATE  TABLE IF NOT EXISTS `'._DB_PREFIX_.'braspress_trf_regiao` (
   CONSTRAINT `fk_trf_regiao_braspress_regiao1`
     FOREIGN KEY (`braspress_regiao_id` )
     REFERENCES `'._DB_PREFIX_.'braspress_regiao` (`id` )
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE)
 ENGINE = '._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8;';
 
 $sql[] = 'CREATE  TABLE IF NOT EXISTS `'._DB_PREFIX_.'braspress_tas_rodo_regiao` (
@@ -79,13 +79,13 @@ $sql[] = 'CREATE  TABLE IF NOT EXISTS `'._DB_PREFIX_.'braspress_tas_rodo_regiao`
   CONSTRAINT `fk_braspress_tas_rodo_regiao_braspress_taxas_frete1`
     FOREIGN KEY (`braspress_taxas_frete_id` )
     REFERENCES `'._DB_PREFIX_.'braspress_taxas_frete` (`id` )
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION,
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
   CONSTRAINT `fk_braspress_tas_rodo_regiao_braspress_regiao1`
     FOREIGN KEY (`braspress_regiao_id` )
     REFERENCES `'._DB_PREFIX_.'braspress_regiao` (`id` )
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE)
 ENGINE = '._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8;';
 
 $sql[] = 'CREATE  TABLE IF NOT EXISTS `'._DB_PREFIX_.'braspress_suframa_regiao` (
@@ -98,13 +98,13 @@ $sql[] = 'CREATE  TABLE IF NOT EXISTS `'._DB_PREFIX_.'braspress_suframa_regiao` 
   CONSTRAINT `fk_braspress_suframa_regiao_braspress_taxas_frete1`
     FOREIGN KEY (`braspress_taxas_frete_id` )
     REFERENCES `'._DB_PREFIX_.'braspress_taxas_frete` (`id` )
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION,
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
   CONSTRAINT `fk_braspress_suframa_regiao_braspress_regiao1`
     FOREIGN KEY (`braspress_regiao_id` )
     REFERENCES `'._DB_PREFIX_.'braspress_regiao` (`id` )
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE)
 ENGINE = '._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8;';
 
 // dados
