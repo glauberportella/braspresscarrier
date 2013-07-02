@@ -572,7 +572,7 @@ class BraspressCarrier extends CarrierModule
 
 		// gris rodo
 		$valGris = $taxas['gris_rodo'] * $totalNota / 100;
-
+		$freteTotal += $valGris;
 		// trf
 		//if ($trf) {
 			$valTrf = $taxas['trf'] * $totalNota / 100;
