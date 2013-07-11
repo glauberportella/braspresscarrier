@@ -80,6 +80,7 @@ class BraspressCarrier extends CarrierModule
 
 
 		if (!parent::install() ||
+			!Configuration::updateValue('BRASPRESS_CEP_ORIGEM', '00000-000') ||
 			!Configuration::updateValue('BRASPRESS_CARRIER_ID', (int)$id_carrier) ||
 			!$this->registerHook('updateCarrier'))
 			return false;
@@ -186,6 +187,16 @@ class BraspressCarrier extends CarrierModule
 					margin-left: 7px;
 				}
 			</style>
+
+			<form action="index.php?tab='.Tools::getValue('tab').'&configure='.Tools::getValue('configure').'&token='.Tools::getValue('token').'&tab_module='.Tools::getValue('tab_module').'&module_name='.Tools::getValue('module_name').'&id_tab=1&section=general" method="post" class="form" id="configFormCep">
+				<fieldset>
+					<legend><img src="'.$this->_path.'logo.gif" alt="" /> '.$this->l('Dados do Vendedor').'</legend>
+					<label for="braspress_cep_origem">'.$this->l('CEP de Origem').'</label> 
+					<input type="text" name="braspress_cep_origem" id="braspress_cep_origem" value="'.Configuration::get('BRASPRESS_CEP_ORIGEM').'" />
+				</fieldset>
+				<p><center><input type="submit" name="submitSave" value="'.$this->l('Salvar').'" class="button" /></center></p>
+			</form>
+
 			<form action="index.php?tab='.Tools::getValue('tab').'&configure='.Tools::getValue('configure').'&token='.Tools::getValue('token').'&tab_module='.Tools::getValue('tab_module').'&module_name='.Tools::getValue('module_name').'&id_tab=1&section=general" method="post" class="form" id="configForm">
 				<fieldset>
 					<legend><img src="'.$this->_path.'logo.gif" alt="" /> '.$this->l('Taxas Braspress Nível Nacional').'</legend>
@@ -197,13 +208,17 @@ class BraspressCarrier extends CarrierModule
 
 	private function _postValidation()
 	{
-		// nada a fazer
+		if (Tools::getValue('braspress_cep_origem') == NULL)
+			$this->_postErrors[]  = $this->l('Your Zip / Postal code is not specified');
 	}
 
 	private function _postProcess()
 	{
 		// Saving new configurations
 		$success = true;
+
+		if (Configuration::updateValue('BRASPRESS_CEP_ORIGEM', Tools::getValue('braspress_cep_origem')))
+			$this->_html .= $this->displayConfirmation($this->l('CEP Atualizado'));
 
 		$regioes = Tools::getValue('regiao');
 		$rows = array();
@@ -505,6 +520,17 @@ class BraspressCarrier extends CarrierModule
 		 */
 		$db = Db::getInstance();
 
+		// obtem postcode e regiao do vendedor
+		$cep_origem = Configuration::get('BRASPRESS_CEP_ORIGEM');
+		$postcode_origem = (int)substr($cep_origem, 0, 5);
+		// regiao origem
+		$sqlRegiaoOrigem = 'SELECT r.* FROM '._DB_PREFIX_.'braspress_regiao r'.
+			' WHERE '.$postcode_origem.' BETWEEN r.cep_inicial AND r.cep_final';
+		$regiaoOrigem = $db->getRow($sqlRegiaoOrigem);
+		if (!$regiaoOrigem)
+			return false;
+
+		// dados da compra
 		$cart = new Cart($params->id);
 		$customer = new Customer($params->id_customer);
 		$address = new Address($params->id_address_delivery);
@@ -522,6 +548,9 @@ class BraspressCarrier extends CarrierModule
 		if (!$regiao)
 			return false;
 
+		// mesmo estado?
+		$mesmo_estado = $regiao['id'] == $regiaoOrigem['id'];
+
 		// faixa de peso
 		$peso = $cart->getTotalWeight();
 		$sqlFaixaPeso = 'SELECT f.* FROM '._DB_PREFIX_.'braspress_faixa_peso f'.
@@ -537,18 +566,19 @@ class BraspressCarrier extends CarrierModule
 		if (!$taxas)
 			return false;
 
-		/*// TRF
+		// TRF - verifica se tem trf para destino
 		$sqlTrf = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_trf_regiao t'.
 			' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
 		$trf = $db->getRow($sqlTrf);
-		// TAS RODO
-		$sqlTrf = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_tas_rodo_regiao t'.
-			' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
-		$tasrodo = $db->getRow($sqlTrf);
-		// SUFRAMA
+
+		// SUFRAMA - verifica se tem suframa para destino
 		$sqlTrf = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_suframa_regiao t'.
 			' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
-		$suframa = $db->getRow($sqlTrf);*/
+		$suframa = $db->getRow($sqlTrf);
+		$suframa = $suframa && !$mesmo_estado;
+
+		// @TODO TAS RODO - verifica se destino e mesmo estado se for nao calcula essa taxa
+		$tasrodo = !$mesmo_estado;
 
 		$freteSubtotal = 0;
 		$freteTotal = 0;
@@ -574,26 +604,24 @@ class BraspressCarrier extends CarrierModule
 		$valGris = $taxas['gris_rodo'] * $totalNota / 100;
 		$freteTotal += $valGris;
 		// trf
-		//if ($trf) {
+		if ($trf) {
 			$valTrf = $taxas['trf'] * $totalNota / 100;
 			$valTrf = $valTrf < $taxas['trf_minimo'] ? $taxas['trf_minimo'] : $valTrf;
 			$freteTotal += $valTrf;
-		//}
-
-		// tas rodo
-		//if ($tasrodo) {
-			$freteTotal += $taxas['tas_rodo'];
-		//}
+		}
 
 		// suframa
-		//if ($suframa) {
+		if ($suframa) {
 			$freteTotal += $taxas['suframa'];
-		//}
+		}
+
+		// tas rodo
+		if ($tasrodo) {
+			$freteTotal += $taxas['tas_rodo'];
+		}
 
 		// adm rodo
-		//if ($taxas['adm_rodo']) {
-			$freteTotal += ($freteSubtotal * $taxas['adm_rodo'] / 100);
-		//}
+		$freteTotal += ($freteSubtotal * $taxas['adm_rodo'] / 100);
 
 		return (float)$freteTotal;
 	}
