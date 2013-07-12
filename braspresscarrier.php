@@ -80,7 +80,7 @@ class BraspressCarrier extends CarrierModule
 
 
 		if (!parent::install() ||
-			!Configuration::updateValue('BRASPRESS_CEP_ORIGEM', '00000-000') ||
+			!Configuration::updateValue('BRASPRESS_CEP_ORIGEM', '38610-000') ||
 			!Configuration::updateValue('BRASPRESS_CARRIER_ID', (int)$id_carrier) ||
 			!$this->registerHook('updateCarrier'))
 			return false;
