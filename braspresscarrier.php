@@ -682,7 +682,7 @@ class BraspressCarrier extends CarrierModule
 	 * @param float $taxa
 	 * @return float
 	 */
-	protected function calculaTasRodo($valorBase, $taxa, $minimo)
+	protected function calculaTasRodo($taxa)
 	{
 		return $taxa;
 	}
