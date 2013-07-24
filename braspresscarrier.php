@@ -5,6 +5,9 @@ if (!defined('_PS_VERSION_'))
 
 class BraspressCarrier extends CarrierModule
 {
+	const TAXA_TRT = 15; // porcentagem,  15%
+	const MINIMO_TRT = 12; // real, valor minimo R$ 12.00
+
 	public $id_carrier;
 
 	private $_html = '';
@@ -191,7 +194,7 @@ class BraspressCarrier extends CarrierModule
 			<form action="index.php?tab='.Tools::getValue('tab').'&configure='.Tools::getValue('configure').'&token='.Tools::getValue('token').'&tab_module='.Tools::getValue('tab_module').'&module_name='.Tools::getValue('module_name').'&id_tab=1&section=general" method="post" class="form" id="configFormCep">
 				<fieldset>
 					<legend><img src="'.$this->_path.'logo.gif" alt="" /> '.$this->l('Dados do Vendedor').'</legend>
-					<label for="braspress_cep_origem">'.$this->l('CEP de Origem').'</label> 
+					<label for="braspress_cep_origem">'.$this->l('CEP de Origem').'</label>
 					<input type="text" name="braspress_cep_origem" id="braspress_cep_origem" value="'.Configuration::get('BRASPRESS_CEP_ORIGEM').'" />
 				</fieldset>
 				<p><center><input type="submit" name="submitSave" value="'.$this->l('Salvar').'" class="button" /></center></p>
@@ -532,14 +535,11 @@ class BraspressCarrier extends CarrierModule
 
 		// dados da compra
 		$cart = new Cart($params->id);
-		$customer = new Customer($params->id_customer);
+		//$customer = new Customer($params->id_customer);
 		$address = new Address($params->id_address_delivery);
 		$postcode = (int)substr($address->postcode, 0, 5);
 
 		$totalNota = $cart->getOrderTotal(true, Cart::BOTH_WITHOUT_SHIPPING);
-
-		$regiao = array();
-		$faixaPeso = array();
 
 		// regiao
 		$sqlRegiao = 'SELECT r.* FROM '._DB_PREFIX_.'braspress_regiao r'.
@@ -572,57 +572,142 @@ class BraspressCarrier extends CarrierModule
 		$trf = $db->getRow($sqlTrf);
 
 		// SUFRAMA - verifica se tem suframa para destino
-		$sqlTrf = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_suframa_regiao t'.
+		$sqlSuframa = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_suframa_regiao t'.
 			' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
-		$suframa = $db->getRow($sqlTrf);
-		$suframa = $suframa && !$mesmo_estado;
+		$suframaRow = $db->getRow($sqlSuframa);
+		$suframa = $suframaRow && !$mesmo_estado;
 
-		// @TODO TAS RODO - verifica se destino e mesmo estado se for nao calcula essa taxa
+		// Verifica se destino eh mesmo estado se for nao calcula essa taxa
 		$tasrodo = !$mesmo_estado;
 
 		$freteSubtotal = 0;
-		$freteTotal = 0;
 
-		$fv = ($totalNota * $taxas['fv'] / 100);
-		if ($faixaPeso['usar_fpk'] == 1) {
-			$freteSubtotal = $taxas['fpk'] * $peso + $fv;
+		$fv = $totalNota * $taxas['fv'] / 100;
+		if ((int)$faixaPeso['usar_fpk'] == 1 && (float)$taxas['fpk'] != 0) {
+			$freteSubtotal += $taxas['fpk'] * $peso + $fv;
 		} else {
-			$freteSubtotal = $taxas['fp'] + $fv;
+			$freteSubtotal += $taxas['fp'] + $fv;
 		}
-		$freteTotal += $freteSubtotal;
 
 		// pedagio
-		// Se for 100Kg 3,90. Acima de 100Kg será cobrado mais 3,90. e assim sucessivamente.
-		$extraPedagio = (int)($peso / 100);
-		$multiplicador = 1;
-		if ($extraPedagio > 0)
-			$multiplicador = $extraPedagio;
-		$pedagio = $taxas['pedagio'] * $multiplicador;
-		$freteTotal += $pedagio;
+		$pedagio = $this->calculaPedagio($taxas['pedagio'], $peso);
+		$freteSubtotal += $pedagio;
 
 		// gris rodo
-		$valGris = $taxas['gris_rodo'] * $totalNota / 100;
-		$freteTotal += $valGris;
+		$valGris = $this->calculaGrisRodo((float)$taxas['gris_rodo'], $totalNota);
+		$freteSubtotal += $valGris;
+
 		// trf
 		if ($trf) {
-			$valTrf = $taxas['trf'] * $totalNota / 100;
-			$valTrf = $valTrf < $taxas['trf_minimo'] ? $taxas['trf_minimo'] : $valTrf;
-			$freteTotal += $valTrf;
+			$valTrf = $this->calculaTrf((float)$taxas['trf'], $totalNota, (float)$taxas['trf_minimo']);
+			$freteSubtotal += $valTrf;
 		}
 
 		// suframa
 		if ($suframa) {
-			$freteTotal += $taxas['suframa'];
+			$valSuframa = $this->calculaSuframa((float)$taxas['suframa']);
+			$freteSubtotal += $valSuframa;
 		}
 
 		// tas rodo
 		if ($tasrodo) {
-			$freteTotal += $taxas['tas_rodo'];
+			$valTas = $this->calculaTasRodo((float)$taxas['tas_rodo']);
+			$freteSubtotal += $valTas;
 		}
 
 		// adm rodo
-		$freteTotal += ($freteSubtotal * $taxas['adm_rodo'] / 100);
+		$valAdm = $this->calculaAdmRodo($freteSubtotal, (float)$taxas['adm_rodo']);
+		$freteSubtotal += $valAdm;
+
+		// TRT ?? como e quando se calcula?
+		$valTrt = $this->calculaTrt($freteSubtotal, self::TAXA_TRT, self::MINIMO_TRT);
+
+		$freteTotal = $freteSubtotal + $valTrt;
 
 		return (float)$freteTotal;
+	}
+
+	/**
+	 * Calcula pedagio
+	 * Regra: Se for 100Kg 3,90. Acima de 100Kg será cobrado mais 3,90. e assim sucessivamente.
+	 * @param float $taxa
+	 * @param float $peso
+	 * @return float
+	 */
+	protected function calculaPedagio($taxa, $peso)
+	{
+		$extraPedagio = (int)($peso / 100);
+		$multiplicador = 1;
+		if ($extraPedagio > 0)
+			$multiplicador = $extraPedagio;
+		return $taxa * $multiplicador;
+	}
+
+	/**
+	 *
+	 * @param float $taxa
+	 * @param float $totalNota
+	 * @return float
+	 */
+	protected function calculaGrisRodo($taxa, $totalNota)
+	{
+		return $taxa * $totalNota / 100;
+	}
+
+	/**
+	 *
+	 * @param float $taxa
+	 * @param float $totalNota
+	 * @param float $valorMinimo
+	 * @return float
+	 */
+	protected function calculaTrf($taxa, $totalNota, $valorMinimo)
+	{
+		$valTrf = $taxa * $totalNota / 100;
+		return $valTrf < $valorMinimo ? $valorMinimo : $valTrf;
+	}
+
+	/**
+	 *
+	 * @param float $taxa
+	 * @return float
+	 */
+	protected function calculaSuframa($taxa)
+	{
+		return $taxa;
+	}
+
+	/**
+	 *
+	 * @param float $taxa
+	 * @return float
+	 */
+	protected function calculaTasRodo($valorBase, $taxa, $minimo)
+	{
+		return $taxa;
+	}
+
+	/**
+	 *
+	 * @param float $subtotalFrete
+	 * @param float $taxa
+	 * @return float
+	 */
+	protected function calculaAdmRodo($subtotalFrete, $taxa)
+	{
+		return $subtotalFrete * $taxa / 100;
+	}
+
+	/**
+	 *
+	 * @param float $valorBase
+	 * @param float $taxa
+	 * @param float $minimo
+	 * @return float
+	 */
+	protected function calculaTrt($valorBase, $taxa, $minimo)
+	{
+		$valTaxaTrt = $valorBase * $taxa / 100;
+		return $valTaxaTrt < $minimo ? $minimo : $valTaxaTrt;
 	}
 }
