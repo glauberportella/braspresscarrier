@@ -1,9 +1,9 @@
-UPDATE ps_braspress_taxas_frete SET fp=98.07, fv=0.5, fpk=0, impostos=0 WHERE id=1;
-UPDATE ps_braspress_taxas_frete SET fp=100.69, fv=0.5, fpk=0, impostos=0 WHERE id=2;
-UPDATE ps_braspress_taxas_frete SET fp=131.89, fv=0.5, fpk=0, impostos=0 WHERE id=3;
-UPDATE ps_braspress_taxas_frete SET fp=178.84, fv=0.5, fpk=0, impostos=0 WHERE id=4;
-UPDATE ps_braspress_taxas_frete SET fp=219.55, fv=0.5, fpk=0, impostos=0 WHERE id=5;
-UPDATE ps_braspress_taxas_frete SET fp=0, fv=0.5, fpk=3.15, impostos=0 WHERE id=6;
+UPDATE ps_braspress_taxas_frete SET fp=122.67, fv=0.5, fpk=0, impostos=0 WHERE id=1;
+UPDATE ps_braspress_taxas_frete SET fp=125,94, fv=0.5, fpk=0, impostos=0 WHERE id=2;
+UPDATE ps_braspress_taxas_frete SET fp=164,96, fv=0.5, fpk=0, impostos=0 WHERE id=3;
+UPDATE ps_braspress_taxas_frete SET fp=223,68, fv=0.5, fpk=0, impostos=0 WHERE id=4;
+UPDATE ps_braspress_taxas_frete SET fp=274,61, fv=0.5, fpk=0, impostos=0 WHERE id=5;
+UPDATE ps_braspress_taxas_frete SET fp=0, fv=0.5, fpk=3.94, impostos=0 WHERE id=6;
 
 UPDATE ps_braspress_taxas_frete SET fp=22.99, fv=0.3, fpk=0, impostos=0 WHERE id=7;
 UPDATE ps_braspress_taxas_frete SET fp=22.99, fv=0.3, fpk=0, impostos=0 WHERE id=8;

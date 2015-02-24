@@ -211,8 +211,8 @@ class BraspressCarrier extends CarrierModule
 
 	private function _postValidation()
 	{
-		if (Tools::getValue('braspress_cep_origem') == NULL)
-			$this->_postErrors[]  = $this->l('Your Zip / Postal code is not specified');
+		//if (Tools::getValue('braspress_cep_origem') == NULL)
+		//	$this->_postErrors[]  = $this->l('Your Zip / Postal code is not specified');
 	}
 
 	private function _postProcess()
@@ -540,7 +540,9 @@ class BraspressCarrier extends CarrierModule
 		$postcode = (int)substr($address->postcode, 0, 5);
 
 		$totalNota = $cart->getOrderTotal(true, Cart::BOTH_WITHOUT_SHIPPING);
-
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Total Nota: '.$totalNota."\n", FILE_APPEND);
+                // ~ DEBUG
 		// regiao
 		$sqlRegiao = 'SELECT r.* FROM '._DB_PREFIX_.'braspress_regiao r'.
 			' WHERE '.$postcode.' BETWEEN r.cep_inicial AND r.cep_final';
@@ -553,28 +555,43 @@ class BraspressCarrier extends CarrierModule
 
 		// faixa de peso
 		$peso = $cart->getTotalWeight();
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Peso: '.$peso."\n", FILE_APPEND);
+                // ~ DEBUG
+
 		$sqlFaixaPeso = 'SELECT f.* FROM '._DB_PREFIX_.'braspress_faixa_peso f'.
 			' WHERE '.(float)$peso.' BETWEEN f.peso_inicial AND f.peso_final';
 		$faixaPeso = $db->getRow($sqlFaixaPeso);
 		if (!$faixaPeso)
 			return false;
-
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Faixa Peso: '.implode(', ', $faixaPeso)."\n", FILE_APPEND);
+                // ~ DEBUG
 		// tarifas
 		$sqlTaxas = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_taxas_frete t'.
 			' WHERE t.braspress_regiao_id = '.$regiao['id'].' AND t.braspress_faixa_peso_id = '.$faixaPeso['id'];
 		$taxas = $db->getRow($sqlTaxas);
 		if (!$taxas)
 			return false;
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Taxas: '.implode(', ', $taxas)."\n", FILE_APPEND);
+                // ~ DEBUG
 
 		// TRF - verifica se tem trf para destino
 		$sqlTrf = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_trf_regiao t'.
 			' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
 		$trf = $db->getRow($sqlTrf);
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'TRF: '.implode(', ', $trf)."\n", FILE_APPEND);
+                // ~ DEBUG
 
 		// SUFRAMA - verifica se tem suframa para destino
 		$sqlSuframa = 'SELECT t.* FROM '._DB_PREFIX_.'braspress_suframa_regiao t'.
 			' WHERE t.braspress_taxas_frete_id = '.$faixaPeso['id'].' AND t.braspress_regiao_id = '.$regiao['id'];
 		$suframaRow = $db->getRow($sqlSuframa);
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'SUFRAMA: '.implode(', ', $suframaRow)."\n", FILE_APPEND);
+                // ~ DEBUG
 		$suframa = $suframaRow && !$mesmo_estado;
 
 		// Verifica se destino eh mesmo estado se for nao calcula essa taxa
@@ -583,46 +600,80 @@ class BraspressCarrier extends CarrierModule
 		$freteSubtotal = 0;
 
 		$fv = $totalNota * $taxas['fv'] / 100;
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'FV: '.$fv."\n", FILE_APPEND);
+                // ~ DEBUG
+		// ERRO AQUI quando usa fpk
 		if ((int)$faixaPeso['usar_fpk'] == 1 && (float)$taxas['fpk'] != 0) {
 			$freteSubtotal += $taxas['fpk'] * $peso + $fv;
 		} else {
 			$freteSubtotal += $taxas['fp'] + $fv;
 		}
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Frete Subtotal: '.$freteSubtotal."\n", FILE_APPEND);
+                // ~ DEBUG
 
 		// pedagio
 		$pedagio = $this->calculaPedagio($taxas['pedagio'], $peso);
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Pedagio: '.$pedagio."\n", FILE_APPEND);
+                // ~ DEBUG
 		$freteSubtotal += $pedagio;
 
 		// gris rodo
 		$valGris = $this->calculaGrisRodo((float)$taxas['gris_rodo'], $totalNota);
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'GRIS RODO: '.$valGris."\n", FILE_APPEND);
+                // ~ DEBUG
 		$freteSubtotal += $valGris;
 
 		// trf
 		if ($trf) {
 			$valTrf = $this->calculaTrf((float)$taxas['trf'], $totalNota, (float)$taxas['trf_minimo']);
+			// DEBUG
+	                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Valor TRF: '.$valTrf."\n", FILE_APPEND);
+        	        // ~ DEBUG
 			$freteSubtotal += $valTrf;
 		}
 
 		// suframa
 		if ($suframa) {
 			$valSuframa = $this->calculaSuframa((float)$taxas['suframa']);
+			// DEBUG
+	                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Valor SUFRAMA: '.$valSuframa."\n", FILE_APPEND);
+        	        // ~ DEBUG
 			$freteSubtotal += $valSuframa;
 		}
 
 		// tas rodo
 		if ($tasrodo) {
 			$valTas = $this->calculaTasRodo((float)$taxas['tas_rodo']);
+			// DEBUG
+	                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Valor TAS: '.$valTas."\n", FILE_APPEND);
+        	        // ~ DEBUG
 			$freteSubtotal += $valTas;
 		}
 
 		// adm rodo
 		$valAdm = $this->calculaAdmRodo($freteSubtotal, (float)$taxas['adm_rodo']);
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Valor ADM: '.$valAdm."\n", FILE_APPEND);
+                // ~ DEBUG
 		$freteSubtotal += $valAdm;
 
 		// TRT ?? como e quando se calcula?
 		$valTrt = $this->calculaTrt($freteSubtotal, self::TAXA_TRT, self::MINIMO_TRT);
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Valor TRT: '.$valTrt."\n", FILE_APPEND);
+                // ~ DEBUG
 
 		$freteTotal = $freteSubtotal + $valTrt;
+		// DEBUG
+                //file_put_contents(dirname(__FILE__).'/frete-debug.log', 'Frete TOTAL: '.$freteTotal."\n", FILE_APPEND);
+                // ~ DEBUG
+
+		// reajuste 9%
+		$freteTotal *= 1.09;
 
 		return (float)$freteTotal;
 	}
